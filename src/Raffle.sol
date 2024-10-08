@@ -12,32 +12,41 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
  * @notice A simple raffle contract
  * @dev Implements Chainlink VRFv2
   */
-contract Raffle {
+contract Raffle is VRFConsumerBaseV2Plus{
     error Raffle_NotEnoughETHSent(string msg);
 
     event RaffleEnter(address indexed player);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
     
-    uint256 private constant REQUESTION_CONFIRMATIONS = 3;
+    uint16 private constant REQUESTION_CONFIRMATIONS = 3;
+    uint32 private constant NEW_WORDS = 1;
+    address private constant VRFCOORDINATOR = 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B;
+
+
     uint256 private immutable i_entranceFee;
     uint256 private immutable i_interval;
-    address private immutable i_vrfCoordinator;
     bytes32 private immutable i_gasLane;
     uint64 private immutable i_subscriptionId;
     uint32 private immutable i_callbackGasLimit;
     uint256 private s_lastTimeStamp;
     address[] private s_players;
 
+    struct RequestStatus {
+        bool fulfilled; // whether the request has been successfully fulfilled
+        bool exists; // whether a requestId exists
+        uint256[] randomWords;
+    }
+    mapping(uint256 => RequestStatus) public s_requests; 
+
     constructor(
         uint256 entranceFee, 
         uint256 interval,
-        address vrfCoordinator,
         bytes32 gasLane,
         uint64 subscriptionId,
         uint32 callbackGasLimit
-    ) {
+    ) VRFConsumerBaseV2Plus(VRFCOORDINATOR) {
         i_entranceFee = entranceFee;
         i_interval = interval;
-        i_vrfCoordinator = vrfCoordinator;
         i_gasLane = gasLane;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
@@ -60,21 +69,40 @@ contract Raffle {
         }
 
         // vrf 
-
-        uint256 requestId = i_vrfCoordinator.requestRandomWords(
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
                 keyHash: i_gasLane,
                 subId: i_subscriptionId,
                 requestConfirmations: REQUESTION_CONFIRMATIONS,
                 callbackGasLimit: i_callbackGasLimit,
-                numWords: numWords,
+                numWords: NEW_WORDS,
                 extraArgs: VRFV2PlusClient._argsToBytes(
                     VRFV2PlusClient.ExtraArgsV1({
-                        nativePayment: enableNativePayment
+                        nativePayment: true
                     })
                 )
             })
         );
+        
+    }
+
+
+    function fulfillRandomWords(
+        uint256 _requestId,
+        uint256[] calldata _randomWords
+    ) internal override {
+        require(s_requests[_requestId].exists, "request not found");
+        s_requests[_requestId].fulfilled = true;
+        s_requests[_requestId].randomWords = _randomWords;
+        emit RequestFulfilled(_requestId, _randomWords);
+    }
+
+    function getRequestStatus(
+        uint256 _requestId
+    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
+        require(s_requests[_requestId].exists, "request not found");
+        RequestStatus memory request = s_requests[_requestId];
+        return (request.fulfilled, request.randomWords);
     }
 
     function getEntranceFee() external view returns(uint256) {
