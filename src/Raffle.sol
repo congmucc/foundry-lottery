@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
 /**
  * @title Raffle
@@ -11,7 +12,8 @@ import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/V
  * @notice A simple raffle contract
  * @dev Implements Chainlink VRFv2
  */
-contract Raffle is VRFConsumerBaseV2Plus {
+contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
+    error Raffle_UpkeepNotNeeded(uint256 currentBalance, uint256 numPlayers, uint256 raffleState);
     error Raffle_NotEnoughETHSent(string msg);
     error Raffle_TransferFailed();
     error Raffle_RaffleNotOpen();
@@ -73,7 +75,16 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit RaffleEnter(msg.sender);
     }
 
-    function pickWinner() external {
+    // pickwinner
+    function performUpkeep(bytes calldata /* performData */) external override {
+        (bool upkeepNeeded,) = checkUpkeep("");
+        if (!upkeepNeeded) {
+            revert Raffle_UpkeepNotNeeded(
+                address(this).balance, 
+                s_players.length, 
+                uint256(s_raffleState)
+            );
+        }
         if (block.timestamp - s_lastTimeStamp < i_interval) {
             revert("Not Enough Time Passed!");
         }
@@ -105,12 +116,12 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
         s_players = new address payable[](0);
         s_lastTimeStamp = block.timestamp;
+        emit WinnerPicked(winner);
 
         (bool success,) = winner.call{value: address(this).balance}("");
         if (!success) {
             revert Raffle_TransferFailed();
         }
-        emit WinnerPicked(winner);
     }
 
     function getRequestStatus(uint256 _requestId)
@@ -122,6 +133,27 @@ contract Raffle is VRFConsumerBaseV2Plus {
         RequestStatus memory request = s_requests[_requestId];
         return (request.fulfilled, request.randomWords);
     }
+
+
+    function checkUpkeep(
+        bytes calldata /* checkData */
+    )
+        public
+        view
+        override
+        returns (bool upkeepNeeded, bytes memory /* performData */)
+    {
+        bool timeHasPassed = (block.timestamp - s_lastTimeStamp) >= i_interval;
+        bool isOpen = RaffleState.OPEN == s_raffleState;
+        bool hasBalance = address(this).balance > 0;
+        bool hasPlayers = s_players.length > 0;
+        upkeepNeeded = (timeHasPassed && isOpen && hasBalance && hasPlayers);
+        return (upkeepNeeded, "0x0");
+    }
+
+
+
+    /** Getter Functions */
 
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
