@@ -12,8 +12,12 @@ import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/autom
  * @notice A simple raffle contract
  * @dev Implements Chainlink VRFv2
  */
-contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
-    error Raffle_UpkeepNotNeeded(uint256 currentBalance, uint256 numPlayers, uint256 raffleState);
+contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
+    error Raffle_UpkeepNotNeeded(
+        uint256 currentBalance,
+        uint256 numPlayers,
+        uint256 raffleState
+    );
     error Raffle_NotEnoughETHSent(string msg);
     error Raffle_TransferFailed();
     error Raffle_RaffleNotOpen();
@@ -30,7 +34,6 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
 
     uint16 private constant REQUESTION_CONFIRMATIONS = 3;
     uint32 private constant NEW_WORDS = 1;
-    address private constant VRFCOORDINATOR = 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B;
 
     uint256 private immutable i_entranceFee;
     uint256 private immutable i_interval;
@@ -51,15 +54,19 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
 
     mapping(uint256 => RequestStatus) public s_requests;
 
-    constructor(uint256 entranceFee, uint256 interval, bytes32 gasLane, uint64 subscriptionId, uint32 callbackGasLimit)
-        VRFConsumerBaseV2Plus(VRFCOORDINATOR)
-    {
+    constructor(
+        uint256 entranceFee,
+        uint256 interval,
+        bytes32 gasLane,
+        uint64 subscriptionId,
+        uint32 callbackGasLimit,
+        address vrfCoordinatorV2
+    ) VRFConsumerBaseV2Plus(vrfCoordinatorV2) {
         i_entranceFee = entranceFee;
         i_interval = interval;
         i_gasLane = gasLane;
         i_subscriptionId = subscriptionId;
         i_callbackGasLimit = callbackGasLimit;
-
         s_raffleState = RaffleState.OPEN;
         s_lastTimeStamp = block.timestamp;
     }
@@ -77,11 +84,11 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
 
     // pickwinner
     function performUpkeep(bytes calldata /* performData */) external override {
-        (bool upkeepNeeded,) = checkUpkeep("");
+        (bool upkeepNeeded, ) = checkUpkeep("");
         if (!upkeepNeeded) {
             revert Raffle_UpkeepNotNeeded(
-                address(this).balance, 
-                s_players.length, 
+                address(this).balance,
+                s_players.length,
                 uint256(s_raffleState)
             );
         }
@@ -97,7 +104,9 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
                 requestConfirmations: REQUESTION_CONFIRMATIONS,
                 callbackGasLimit: i_callbackGasLimit,
                 numWords: NEW_WORDS,
-                extraArgs: VRFV2PlusClient._argsToBytes(VRFV2PlusClient.ExtraArgsV1({nativePayment: true}))
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: true})
+                )
             })
         );
         emit RequestedRaffleWinner(requestId);
@@ -106,7 +115,10 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
     /**
      * Chainlink VRF:  get Random words
      */
-    function fulfillRandomWords(uint256 _requestId, uint256[] calldata _randomWords) internal override {
+    function fulfillRandomWords(
+        uint256 _requestId,
+        uint256[] calldata _randomWords
+    ) internal override {
         if (!s_requests[_requestId].exists) {
             revert("request not found");
         }
@@ -118,22 +130,19 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
         s_lastTimeStamp = block.timestamp;
         emit WinnerPicked(winner);
 
-        (bool success,) = winner.call{value: address(this).balance}("");
+        (bool success, ) = winner.call{value: address(this).balance}("");
         if (!success) {
             revert Raffle_TransferFailed();
         }
     }
 
-    function getRequestStatus(uint256 _requestId)
-        external
-        view
-        returns (bool fulfilled, uint256[] memory randomWords)
-    {
+    function getRequestStatus(
+        uint256 _requestId
+    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
         require(s_requests[_requestId].exists, "request not found");
         RequestStatus memory request = s_requests[_requestId];
         return (request.fulfilled, request.randomWords);
     }
-
 
     function checkUpkeep(
         bytes memory /* checkData */
@@ -150,9 +159,6 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
         upkeepNeeded = (timeHasPassed && isOpen && hasBalance && hasPlayers);
         return (upkeepNeeded, "0x0");
     }
-    
-
-
 
     /** Getter Functions */
 
