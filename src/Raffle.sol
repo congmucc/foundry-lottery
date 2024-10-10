@@ -136,7 +136,7 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
 
 
     function checkUpkeep(
-        bytes calldata /* checkData */
+        bytes memory /* checkData */
     )
         public
         view
@@ -150,6 +150,7 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface  {
         upkeepNeeded = (timeHasPassed && isOpen && hasBalance && hasPlayers);
         return (upkeepNeeded, "0x0");
     }
+    
 
 
 
