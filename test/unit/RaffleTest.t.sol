@@ -34,10 +34,31 @@ contract RaffleTest is Test {
             callbackGasLimit,
             vrfCoordinator
         ) = helperConfig.activeNetworkConfig();
+        // give user some eth to play game
+        vm.deal(PLAYER, STARTING_USER_BALANCE);
     }
 
     function testInitializeInOpenState() public view {
         assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
 
+    }
+
+    /** enter Raffle */
+    function testRaffleRevert() public {
+        // Arrange
+        vm.prank(PLAYER);
+        // Act
+        vm.expectRevert(Raffle.Raffle_NotEnoughETHSent.selector);
+        // Assert
+        raffle.enterRaffle();
+
+    }
+
+    /** enter Raffle and when they do a raffle, and record players */
+    function testRaffleRecordsPlayerWhenTheyEnter() public {
+        vm.prank(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
+        address playerRecorded = raffle.getPlayer(0);
+        assert(playerRecorded == PLAYER);
     }
 }

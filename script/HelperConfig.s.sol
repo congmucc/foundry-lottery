@@ -2,9 +2,9 @@
 
 pragma solidity ^0.8.20;
 
-import {Script} from "forge-std/Script.sol";
-import {Raffle} from "../src/Raffle.sol";
-import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
+import { Script } from "forge-std/Script.sol";
+import { Raffle } from "../src/Raffle.sol";
+import { VRFCoordinatorV2Mock } from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 
 contract HelperConfig is Script {
     struct NetWorkConfig {
