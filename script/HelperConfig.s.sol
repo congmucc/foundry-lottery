@@ -2,11 +2,16 @@
 
 pragma solidity ^0.8.20;
 
-import { Script } from "forge-std/Script.sol";
-import { Raffle } from "../src/Raffle.sol";
-import { VRFCoordinatorV2Mock } from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
+import {Script} from "forge-std/Script.sol";
+import {Raffle} from "../src/Raffle.sol";
+import {VRFCoordinatorV2Mock} from "@chainlink/contracts/src/v0.8/mocks/VRFCoordinatorV2Mock.sol";
 
 contract HelperConfig is Script {
+
+    uint256 public constant ETH_SEPOLIA_CHAIN_ID = 11155111;
+    uint256 public constant ETH_MAINNET_CHAIN_ID = 1;
+    uint256 public constant LOCAL_CHAIN_ID = 31337;
+
     struct NetWorkConfig {
         uint256 entranceFee;
         uint256 interval;
@@ -19,8 +24,10 @@ contract HelperConfig is Script {
     NetWorkConfig public activeNetworkConfig;
 
     constructor() {
-        if (block.chainid == 11155111) {
+        if (block.chainid == ETH_SEPOLIA_CHAIN_ID) {
             activeNetworkConfig = getSepoliaEthConfig();
+        // } else if (block.chainid == 421611) {
+        //     activeNetworkConfig = getSepoliaArbConfig();
         } else {
             activeNetworkConfig = getAnvilEthConfig();
         }
@@ -37,8 +44,12 @@ contract HelperConfig is Script {
         });
     }
 
+    // function getSepoliaArbConfig() public pure returns (NetWorkConfig memory) {
+    //     return NetWorkConfig({});
+    // }
+
     function getAnvilEthConfig() public returns (NetWorkConfig memory) {
-        if (activeNetworkConfig.vrfCoordinatorV2!= address(0)) {
+        if (activeNetworkConfig.vrfCoordinatorV2 != address(0)) {
             return activeNetworkConfig;
         }
 
@@ -46,10 +57,7 @@ contract HelperConfig is Script {
         uint96 gasPriceLink = 1e9; // 1 gwei
 
         vm.startBroadcast();
-        VRFCoordinatorV2Mock vrfCoordinatorV2Mock = new VRFCoordinatorV2Mock(
-            baseFee,
-            gasPriceLink
-        );
+        VRFCoordinatorV2Mock vrfCoordinatorV2Mock = new VRFCoordinatorV2Mock(baseFee, gasPriceLink);
         vm.stopBroadcast();
 
         return NetWorkConfig({

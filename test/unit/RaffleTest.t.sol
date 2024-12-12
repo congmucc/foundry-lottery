@@ -8,6 +8,11 @@ import {Test, console} from "forge-std/Test.sol";
 import {HelperConfig} from "../../script/HelperConfig.s.sol";
 
 contract RaffleTest is Test {
+    /**
+     * Events
+     */
+    event EnteredRaffle(address indexed player);
+
     Raffle raffle;
     HelperConfig helperConfig;
     uint256 entranceFee;
@@ -20,30 +25,23 @@ contract RaffleTest is Test {
     address public PLAYER = makeAddr("player");
     uint256 public constant STARTING_USER_BALANCE = 10 ether;
 
-
-
     function setUp() external {
         DeployRaffle deployer = new DeployRaffle();
         (raffle, helperConfig) = deployer.run();
 
-        (
-            entranceFee,
-            interval,
-            gasLane,
-            subscriptionId,
-            callbackGasLimit,
-            vrfCoordinator
-        ) = helperConfig.activeNetworkConfig();
+        (entranceFee, interval, gasLane, subscriptionId, callbackGasLimit, vrfCoordinator) =
+            helperConfig.activeNetworkConfig();
         // give user some eth to play game
         vm.deal(PLAYER, STARTING_USER_BALANCE);
     }
 
     function testInitializeInOpenState() public view {
         assert(raffle.getRaffleState() == Raffle.RaffleState.OPEN);
-
     }
 
-    /** enter Raffle */
+    /**
+     * enter Raffle
+     */
     function testRaffleRevert() public {
         // Arrange
         vm.prank(PLAYER);
@@ -51,14 +49,25 @@ contract RaffleTest is Test {
         vm.expectRevert(Raffle.Raffle_NotEnoughETHSent.selector);
         // Assert
         raffle.enterRaffle();
-
     }
 
-    /** enter Raffle and when they do a raffle, and record players */
+    /**
+     * enter Raffle and when they do a raffle, and record players
+     */
     function testRaffleRecordsPlayerWhenTheyEnter() public {
         vm.prank(PLAYER);
         raffle.enterRaffle{value: entranceFee}();
         address playerRecorded = raffle.getPlayer(0);
         assert(playerRecorded == PLAYER);
+    }
+
+    /**
+     * testEmitEvent
+     */
+    function testEmitEventOnEntrance() public {
+        vm.prank(PLAYER);
+        vm.expectEmit(true, false, false, false, address(raffle));
+        emit EnteredRaffle(PLAYER);
+        raffle.enterRaffle{value: entranceFee}();
     }
 }

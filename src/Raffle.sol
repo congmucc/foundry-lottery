@@ -6,19 +6,28 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFCo
 import {VRFV2PlusClient} from "@chainlink/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
 import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/automation/AutomationCompatible.sol";
 
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+
 /**
  * @title Raffle
  * @author eason
  * @notice A simple raffle contract
  * @dev Implements Chainlink VRFv2
  */
-contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
+contract Raffle is
+    VRFConsumerBaseV2Plus,
+    AutomationCompatibleInterface,
+    AccessControl,
+    Initializable
+{
     error Raffle_UpkeepNotNeeded(
         uint256 currentBalance,
         uint256 numPlayers,
         uint256 raffleState
     );
-    error Raffle_NotEnoughETHSent(string msg);
+    error Raffle_NotEnoughETHSent();
     error Raffle_TransferFailed();
     error Raffle_RaffleNotOpen();
 
@@ -28,23 +37,36 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         CALCULATING
     }
 
-    event RaffleEnter(address indexed player);
+    bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant SERVER_ROLE = keccak256("SERVER_ROLE");
+    bytes32 public constant MANAGE_ROLE = keccak256("MANAGE_ROLE");
+
+    event EnteredRaffle(
+        address indexed player,
+        uint256 tokenId,
+        uint256 amount
+    );
     event RequestedRaffleWinner(uint256 indexed requestId);
-    event WinnerPicked(address indexed winner);
+    event WinnerPicked(
+        address indexed winner,
+        uint256 amount
+    );
 
     uint16 private constant REQUESTION_CONFIRMATIONS = 3;
     uint32 private constant NEW_WORDS = 1;
 
-    uint256 private immutable i_entranceFee;
+    uint256 private i_entranceFee;
     uint256 private immutable i_interval;
     bytes32 private immutable i_gasLane;
     uint64 private immutable i_subscriptionId;
     uint32 private immutable i_callbackGasLimit;
 
-    address payable[] private s_players;
-    uint256 private s_lastTimeStamp;
-    address private s_recentWinner;
-    RaffleState private s_raffleState;
+
+    struct Order {
+        address player;
+        uint256 amount;
+        uint256 token_id; //0 -> ETH, 1 -> USDT
+    }
 
     struct RequestStatus {
         bool fulfilled; // whether the request has been successfully fulfilled
@@ -52,7 +74,25 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         uint256[] randomWords;
     }
 
+    struct Token {
+        uint256 token_id; // currencyID // 0 ETH, 1 USDT, 2 USDC
+        address token_address; // currency address
+        uint256 min_bet_amount; // bet min
+        uint256 max_bet_amount; // bet max
+    }
+
+    address payable[] private s_players;
+    Order[] private orders;
+
+    uint256 private s_lastTimeStamp;
+    Order private s_recentWinner;
+    RaffleState private s_raffleState;
+
+
+
     mapping(uint256 => RequestStatus) public s_requests;
+    // mapping(uint256 => Order) public orderInfo;
+    mapping(uint256 => Token) public tokens;
 
     constructor(
         uint256 entranceFee,
@@ -62,6 +102,9 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         uint32 callbackGasLimit,
         address vrfCoordinatorV2
     ) VRFConsumerBaseV2Plus(vrfCoordinatorV2) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(SERVER_ROLE, msg.sender);
         i_entranceFee = entranceFee;
         i_interval = interval;
         i_gasLane = gasLane;
@@ -71,15 +114,71 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         s_lastTimeStamp = block.timestamp;
     }
 
-    function enterRaffle() public payable {
-        if (msg.value < i_entranceFee) {
-            revert Raffle_NotEnoughETHSent("Not Enough ETH Sent!");
-        }
+    function initialize(uint256 entranceFee) public initializer {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ADMIN_ROLE, msg.sender);
+        _grantRole(SERVER_ROLE, msg.sender);
+        i_entranceFee = entranceFee;
+    }
+
+    function adminSetEnv(uint256 fee_percentage) public onlyRole(ADMIN_ROLE) {
+        i_entranceFee = fee_percentage;
+    }
+
+    function adminSetToken(
+        uint256 token_id,
+        address token_address,
+        uint256 min_bet_amount,
+        uint256 max_bet_amount
+    ) public onlyRole(ADMIN_ROLE) {
+        tokens[token_id] = Token(
+            token_id,
+            token_address,
+            min_bet_amount,
+            max_bet_amount
+        );
+    }
+
+    function enterRaffle(
+        uint256 token_id, // 0 ETH, 1 USDT, 2 USDC
+        uint256 amount
+    ) public payable {
         if (s_raffleState != RaffleState.OPEN) {
             revert Raffle_RaffleNotOpen();
         }
-        s_players.push(payable(msg.sender));
-        emit RaffleEnter(msg.sender);
+        // 检查金额
+        uint256 amount_;
+        if (token_id == 0) {
+            amount_ = msg.value;
+        } else {
+            amount_ = amount;
+        }
+
+        // check
+        if (!_checkAmount(token_id, amount_)) {
+            revert Raffle_NotEnoughETHSent();
+        }
+
+        // transfer
+        if (token_id > 0) {
+            Token memory t = tokens[token_id];
+
+            IERC20(t.token_address).transferFrom(
+                msg.sender,
+                address(this),
+                amount
+            );
+        }
+
+        // s_players.push(payable(msg.sender));
+        Order memory o = Order({
+            player: payable(msg.sender),
+            amount: amount,
+            token_id: token_id
+        });
+        orders.push(o);
+        
+        emit EnteredRaffle(msg.sender, token_id, amount);
     }
 
     // pickwinner
@@ -88,7 +187,7 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (!upkeepNeeded) {
             revert Raffle_UpkeepNotNeeded(
                 address(this).balance,
-                s_players.length,
+                orders.length,
                 uint256(s_raffleState)
             );
         }
@@ -122,17 +221,27 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         if (!s_requests[_requestId].exists) {
             revert("request not found");
         }
-        uint256 indexOfWinner = _randomWords[0] % s_players.length;
-        address payable winner = s_players[indexOfWinner];
+        uint256 indexOfWinner = _randomWords[0] % orders.length;
+        Order memory winner = orders[indexOfWinner];
         s_recentWinner = winner;
 
-        s_players = new address payable[](0);
+        // s_players = new address payable[](0);
+        delete orders;
         s_lastTimeStamp = block.timestamp;
-        emit WinnerPicked(winner);
+        emit WinnerPicked(winner.player, winner.amount * 2);
 
-        (bool success, ) = winner.call{value: address(this).balance}("");
-        if (!success) {
-            revert Raffle_TransferFailed();
+        Token memory t = tokens[winner.token_id];
+        // Transfer ERC20 tokens
+        if (winner.token_id == 1 || winner.token_id == 2) {
+            bool tokenSuccess = IERC20(t.token_address).transfer(winner.player, winner.amount * 2 - i_entranceFee);
+            if (!tokenSuccess) {
+                revert Raffle_TransferFailed();
+            }
+        } else if (winner.token_id == 0) {
+            (bool success, ) = winner.player.call{value: winner.amount * 2 - i_entranceFee}("");
+            if (!success) {
+                revert Raffle_TransferFailed();
+            }
         }
     }
 
@@ -160,8 +269,22 @@ contract Raffle is VRFConsumerBaseV2Plus, AutomationCompatibleInterface {
         return (upkeepNeeded, "0x0");
     }
 
-    /** Getter Functions */
+    function _checkAmount(
+        uint256 tokenId_,
+        uint256 amount_
+    ) private view returns (bool) {
+        Token memory t = tokens[tokenId_];
+        if (t.max_bet_amount < amount_) {
+            return false;
+        } else if (t.min_bet_amount > amount_) {
+            return false;
+        }
+        return true;
+    }
 
+    /**
+     * Getter Functions
+     */
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
     }

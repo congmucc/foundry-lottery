@@ -11,10 +11,6 @@ This is a foundry project for smart contract of lottery game.
     2. Chainlink Automation -> Time based trigger
 
 
-## BY
-
-[The Github course link](https://github.com/Cyfrin/foundry-full-course-cu?tab=readme-ov-file#introduction-6)
-
 ## Documentation
 
 https://book.getfoundry.sh/
@@ -77,3 +73,8 @@ $ cast --help
     1.Work on a local chain
     2.Forked estnet
     3.Forked Mainnet
+
+
+## BY
+
+[The Github course link](https://github.com/Cyfrin/foundry-full-course-cu?tab=readme-ov-file#introduction-6)
