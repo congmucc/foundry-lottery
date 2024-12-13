@@ -58,7 +58,7 @@ contract Raffle is
     uint256 private i_entranceFee;
     uint256 private immutable i_interval;
     bytes32 private immutable i_gasLane;
-    uint64 private immutable i_subscriptionId;
+    uint256 private immutable i_subscriptionId;
     uint32 private immutable i_callbackGasLimit;
 
 
@@ -95,10 +95,10 @@ contract Raffle is
     mapping(uint256 => Token) public tokens;
 
     constructor(
-        uint256 entranceFee,
+        uint256 subscriptionId,
+        bytes32 gasLane, // keyHash
         uint256 interval,
-        bytes32 gasLane,
-        uint64 subscriptionId,
+        uint256 entranceFee,
         uint32 callbackGasLimit,
         address vrfCoordinatorV2
     ) VRFConsumerBaseV2Plus(vrfCoordinatorV2) {
