@@ -20,19 +20,19 @@ https://book.getfoundry.sh/
 ### Build
 
 ```shell
-$ forge build
+$ make build
 ```
 
 ### Test
 
 ```shell
-$ forge test
+$ make test
 ```
 
 ### Format
 
 ```shell
-$ forge fmt
+$ make fmt
 ```
 
 ### Gas Snapshots
@@ -50,7 +50,7 @@ $ anvil
 ### Deploy
 
 ```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+$ make deploy
 ```
 
 ### Cast
@@ -71,8 +71,7 @@ $ cast --help
 1.Write some deploy scripts
 2.Write our tests
     1.Work on a local chain
-    2.Forked estnet
-    3.Forked Mainnet
+    2.Forked testnet
 
 
 ## BY
